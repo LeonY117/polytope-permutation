@@ -1,0 +1,2 @@
+greedy_cubes: 1206332
+greedy_all:   1220590
