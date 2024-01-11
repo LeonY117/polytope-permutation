@@ -4,6 +4,7 @@ from .utils import get_inverse_move, remove_prefix
 
 __all__ = ["iterate_reduce_sequence"]
 
+
 def _reduce_commutative(subsequence, n):
     """Reduce a subsequence of commutative moves given cycle length n"""
     # TODO: we don't have to sort, it can be O(n) with stacks.
@@ -109,6 +110,9 @@ def _iterate_subsequence_reduction(subsequence, puzzle):
         return subsequence
 
     if puzzle.startswith("globe"):
+        assert len(puzzle.split("/")) > 1(
+            "Globe puzzles require full puzzle name, e.g. globe_1/8"
+        )
         n = int(puzzle.split("/")[1])
         reduction_method = partial(_reduce_subsequence["globe"], n=n * 2)
     elif puzzle.startswith("cube"):
