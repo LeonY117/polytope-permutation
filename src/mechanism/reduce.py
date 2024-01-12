@@ -11,6 +11,7 @@ def _reduce_commutative(subsequence, n):
     subsequence.sort()
     out = []
     curr_count, curr_move = 0, ""
+
     # reduce 3 or 4 in a row:
     for move in subsequence + ["x"]:
         # a dummy item 'x' to make loop run once more for leftover items
@@ -97,7 +98,7 @@ def iterate_reduction(sequence, method):
     prev = []
     curr = sequence
 
-    while prev != curr:
+    while len(prev) != len(curr):
         prev = curr[:]
         curr = method(curr)
 
@@ -131,14 +132,14 @@ def _reduce_sequence(sequence, puzzle):
     out = []
     curr_face = ""
     curr_subsequence = []
-    for move in sequence + ["x"]:
+    for i, move in enumerate(sequence):
         face = remove_prefix(move, "-")[0]
         if face != curr_face:
             out.extend(_iterate_subsequence_reduction(curr_subsequence, puzzle))
             curr_subsequence = []
         curr_face = face
         curr_subsequence.append(move)
-
+    out.extend(_iterate_subsequence_reduction(curr_subsequence, puzzle))
     return out
 
 
