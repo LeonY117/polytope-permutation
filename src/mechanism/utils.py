@@ -91,6 +91,6 @@ def load_puzzle(
 
 def normalize_state(state):
     if type(state) == list:
-        n = len(set(state)) - 1
+        n = max(set(state))
         return [s / n for s in state]
-    return state / len(state)
+    return state / max(state)
