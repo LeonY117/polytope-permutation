@@ -12,7 +12,7 @@ def permute(state: List[Any], perm: List[int]) -> List[Any]:
     return new_state
 
 
-def permute_with_swap(state: List[Any], swaps: List[Tuple[int, int]]) -> List[Any]:
+def permute_with_swap(state, swaps):
     """performs permutation with swapping operations"""
     new_state = state.copy()
     for i, j in swaps:

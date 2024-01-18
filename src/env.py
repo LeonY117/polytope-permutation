@@ -1,9 +1,9 @@
 import torch
 import numpy as np
 
-from mechanism.utils import load_puzzle, generate_state_from_moves, normalize_state
-from mechanism.reduce import iterate_reduce_sequence
-from mechanism.permute import permute_with_swap
+from .mechanism.utils import load_puzzle, generate_state_from_moves, normalize_state
+from .mechanism.reduce import iterate_reduce_sequence
+from .mechanism.permute import permute_with_swap
 
 
 class PuzzleEnv:
