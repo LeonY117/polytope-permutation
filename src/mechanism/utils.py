@@ -87,3 +87,10 @@ def load_puzzle(
         state[i] = mapping[s]
 
     return moves, state
+
+
+def normalize_state(state):
+    if type(state) == list:
+        n = len(set(state)) - 1
+        return [s / n for s in state]
+    return state / len(state)
