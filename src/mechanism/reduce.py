@@ -111,10 +111,10 @@ def _iterate_subsequence_reduction(subsequence, puzzle):
         return subsequence
 
     if puzzle.startswith("globe"):
-        assert len(puzzle.split("/")) > 1(
-            "Globe puzzles require full puzzle name, e.g. globe_1/8"
-        )
-        n = int(puzzle.split("/")[1])
+        # assert len(puzzle.split("x")) > 1(
+        #     "Globe puzzles require full puzzle name, e.g. globe_1/8"
+        # )
+        n = int(puzzle.split("x")[1])
         reduction_method = partial(_reduce_subsequence["globe"], n=n * 2)
     elif puzzle.startswith("cube"):
         reduction_method = _reduce_subsequence["cube"]
