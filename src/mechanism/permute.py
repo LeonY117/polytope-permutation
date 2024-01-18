@@ -14,9 +14,10 @@ def permute(state: List[Any], perm: List[int]) -> List[Any]:
 
 def permute_with_swap(state: List[Any], swaps: List[Tuple[int, int]]) -> List[Any]:
     """performs permutation with swapping operations"""
+    new_state = state.copy()
     for i, j in swaps:
-        state[i], state[j] = state[j], state[i]
-    return state
+        new_state[i] = state[j]
+    return new_state
 
 
 def reverse_perm(perm: List[int]) -> List[int]:
