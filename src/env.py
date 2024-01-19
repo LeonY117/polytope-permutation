@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 
+from typing import Dict
+
 from .mechanism.utils import load_puzzle, generate_state_from_moves, normalize_state
 from .mechanism.reduce import iterate_reduce_sequence
 from .mechanism.permute import permute_with_swap
@@ -17,7 +19,10 @@ class PuzzleEnv:
         self.cum_rewards = torch.zeros((self.num_envs), dtype=torch.float32)
         # make sure we have access to the ground truth moves
         self.gt_moves = [[]] * self.num_envs
-        self.success_history, self.success_samples = [], 0
+
+        # make a list of possible shuffle counts:
+        l, r = self.reset_config["shuffle_range"]
+        self.success_history = {n: [] for n in range(l, r)}
 
         # for exporting purposes
         # self.config = env_config
@@ -54,19 +59,19 @@ class PuzzleEnv:
         self.sampler = _Uniform_sampler(*self.reset_config["shuffle_range"])
 
         self.time_cost = config["reward_config"]["time"]
+        self.success_reward = config["reward_config"]["success"]
 
     def step(self, actions):
         self.reset(self.reset_indices)
-
-        # invalid state transitions
+        # invalid state transitions that start with a terminal state
         mask = torch.zeros(self.num_envs)
         mask[self.reset_indices] = 1
 
-        self.compute_next_state(actions)
-        completed, failed = self.compute_termination()
-        self._log_completion(failed, completed)
-        self.compute_reward(completed)
+        self.compute_next_state(actions, mask)
 
+        completed, failed = self.compute_termination()
+        self._log_completion(completed, failed)
+        self.compute_reward(completed)
         self.reset_indices = completed + failed
 
         terminated = torch.zeros(self.num_envs)
@@ -78,6 +83,7 @@ class PuzzleEnv:
         """Iteratively reinitialize & shuffle state at indices"""
         if indices == None:
             indices = list(range(self.num_envs))
+
         # sample n in one batch
         ns = self.sampler.sample((len(indices),))
 
@@ -99,8 +105,10 @@ class PuzzleEnv:
 
         return self.states
 
-    def compute_next_state(self, actions):
+    def compute_next_state(self, actions, mask):
         for i in range(self.num_envs):
+            if mask[i]:
+                continue
             action = self.swaps[actions[i]]
             self.states[i] = permute_with_swap(self.states[i], action)
             self.curr_steps[i] += 1
@@ -110,7 +118,7 @@ class PuzzleEnv:
         self.rewards = torch.ones_like(self.rewards) * self.time_cost
 
         for idx in completed:
-            self.rewards[idx] += 10
+            self.rewards[idx] += self.success_reward
 
         self.cum_rewards += self.rewards
 
@@ -125,17 +133,31 @@ class PuzzleEnv:
                 terminated.append(i)
         return completed, terminated
 
-    def _log_completion(self, terminated, success):
+    def _log_completion(self, success, terminated):
         window_size = self.num_envs
-        success_count, fail_count = len(success), len(terminated)
+        for success_idx in success:
+            n = len(self.gt_moves[success_idx])
+            if n != 0:
+                self.success_history[n].append(1)
+        for fail_idx in terminated:
+            n = len(self.gt_moves[fail_idx])
+            if n != 0:
+                self.success_history[n].append(0)
 
-        self.success_history += [1] * success_count
-        self.success_history += [0] * fail_count
+        # truncate window
+        for n in self.success_history.keys():
+            self.success_history[n] = self.success_history[n][-window_size:]
 
-        self.success_history = self.success_history[-window_size:]
+    def get_completion_rate(self) -> (Dict, float):
+        completion_rate_per_n = {}
+        average_completion_rate = 0
+        for n, history in self.success_history.items():
+            percentage_success = sum(history) / self.num_envs
+            completion_rate_per_n[n] = percentage_success
+            average_completion_rate += percentage_success
+        average_completion_rate /= len(self.success_history)
 
-    def get_completion_rate(self):
-        return sum(self.success_history) / (self.num_envs)
+        return completion_rate_per_n, average_completion_rate
 
     def get_cumulative_reward(self):
         return self.cum_rewards
