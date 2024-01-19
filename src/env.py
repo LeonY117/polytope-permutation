@@ -58,8 +58,9 @@ class PuzzleEnv:
     def step(self, actions):
         self.reset(self.reset_indices)
 
-        terminated = torch.zeros(self.num_envs)
-        terminated[self.reset_indices] = 1
+        # invalid state transitions
+        mask = torch.zeros(self.num_envs)
+        mask[self.reset_indices] = 1
 
         self.compute_next_state(actions)
         completed, failed = self.compute_termination()
@@ -68,7 +69,10 @@ class PuzzleEnv:
 
         self.reset_indices = completed + failed
 
-        return self.states, self.rewards, terminated
+        terminated = torch.zeros(self.num_envs)
+        terminated[completed] = 1
+
+        return self.states, self.rewards, terminated, mask
 
     def reset(self, indices=None):
         """Iteratively reinitialize & shuffle state at indices"""
@@ -106,7 +110,7 @@ class PuzzleEnv:
         self.rewards = torch.ones_like(self.rewards) * self.time_cost
 
         for idx in completed:
-            self.rewards[idx] += len(self.gt_moves[idx]) * 10
+            self.rewards[idx] += 10
 
         self.cum_rewards += self.rewards
 
@@ -131,7 +135,7 @@ class PuzzleEnv:
         self.success_history = self.success_history[-window_size:]
 
     def get_completion_rate(self):
-        return sum(self.success_history) / (len(self.success_history) + 1e-8)
+        return sum(self.success_history) / (self.num_envs)
 
     def get_cumulative_reward(self):
         return self.cum_rewards
