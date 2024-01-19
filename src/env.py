@@ -14,14 +14,17 @@ class PuzzleEnv:
         self.states = np.empty((self.num_envs, self.state_size), dtype=np.float32)
         self.curr_steps = np.zeros(self.num_envs, dtype=int)
         self.rewards = torch.zeros((self.num_envs), dtype=torch.float32)
+        self.cum_rewards = torch.zeros((self.num_envs), dtype=torch.float32)
         # make sure we have access to the ground truth moves
         self.gt_moves = [[]] * self.num_envs
+        self.success_history, self.success_samples = [], 0
 
         # for exporting purposes
         # self.config = env_config
         self.puzzle_name = env_config["puzzle_name"]
 
         self.reset()
+        self.reset_indices = []
 
     def _load_puzzle(self, puzzle_name):
         move_dict, final_state = load_puzzle(puzzle_name, puzzle_dir="./puzzles")
@@ -53,14 +56,17 @@ class PuzzleEnv:
         self.time_cost = config["reward_config"]["time"]
 
     def step(self, actions):
+        self.reset(self.reset_indices)
+
+        terminated = torch.zeros(self.num_envs)
+        terminated[self.reset_indices] = 1
+
         self.compute_next_state(actions)
-        completed, terminated = self.compute_termination()
+        completed, failed = self.compute_termination()
+        self._log_completion(failed, completed)
         self.compute_reward(completed)
 
-        reset_indices = completed + terminated
-        self.reset(reset_indices)
-        terminated = torch.zeros(self.num_envs)
-        terminated[reset_indices] = 1
+        self.reset_indices = completed + failed
 
         return self.states, self.rewards, terminated
 
@@ -68,7 +74,6 @@ class PuzzleEnv:
         """Iteratively reinitialize & shuffle state at indices"""
         if indices == None:
             indices = list(range(self.num_envs))
-
         # sample n in one batch
         ns = self.sampler.sample((len(indices),))
 
@@ -86,6 +91,9 @@ class PuzzleEnv:
             self.states[i, :] = np.array(state, dtype=np.float32)
             self.gt_moves[i] = reduced_moves
             self.curr_steps[i] = 0
+            self.cum_rewards[i] = 0
+
+        return self.states
 
     def compute_next_state(self, actions):
         for i in range(self.num_envs):
@@ -95,10 +103,12 @@ class PuzzleEnv:
 
     def compute_reward(self, completed):
         # step
-        self.rewards = self.rewards + self.time_cost
+        self.rewards = torch.ones_like(self.rewards) * self.time_cost
 
         for idx in completed:
-            self.rewards[idx] += len(self.gt_moves[idx])
+            self.rewards[idx] += len(self.gt_moves[idx]) * 10
+
+        self.cum_rewards += self.rewards
 
     def compute_termination(self):
         completed, terminated = [], []
@@ -110,6 +120,21 @@ class PuzzleEnv:
             if self.curr_steps[i] >= self.max_steps:
                 terminated.append(i)
         return completed, terminated
+
+    def _log_completion(self, terminated, success):
+        window_size = self.num_envs
+        success_count, fail_count = len(success), len(terminated)
+
+        self.success_history += [1] * success_count
+        self.success_history += [0] * fail_count
+
+        self.success_history = self.success_history[-window_size:]
+
+    def get_completion_rate(self):
+        return sum(self.success_history) / (len(self.success_history) + 1e-8)
+
+    def get_cumulative_reward(self):
+        return self.cum_rewards
 
 
 class _Uniform_sampler:
