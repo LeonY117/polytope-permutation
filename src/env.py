@@ -57,6 +57,7 @@ class PuzzleEnv:
 
         self.reset_config = config["reset_config"]
         self.sampler = _Uniform_sampler(*self.reset_config["shuffle_range"])
+        self.extra_generation = self.reset_config["extra_generation"]
 
         self.time_cost = config["reward_config"]["time"]
         self.success_reward = config["reward_config"]["success"]
@@ -88,12 +89,14 @@ class PuzzleEnv:
         ns = self.sampler.sample((len(indices),))
 
         for i, n in zip(indices, ns):
-            # sample n moves
+            # sample n_max moves
             non_reduced_moves = np.random.choice(
-                self.action_names, n.item(), replace=True
+                self.action_names, n.item() + self.extra_generation, replace=True
             )
             # reduce moves
             reduced_moves = iterate_reduce_sequence(non_reduced_moves, self.puzzle_name)
+            # slice n moves
+            reduced_moves = reduced_moves[: n.item()]
             # generate state from move
             state = generate_state_from_moves(
                 reduced_moves, self.move_dict, self.final_state.copy(), inverse=False
