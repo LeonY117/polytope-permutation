@@ -22,7 +22,7 @@ class PuzzleEnv:
 
         # make a list of possible shuffle counts:
         l, r = self.reset_config["shuffle_range"]
-        self.success_history = {n: [] for n in range(l, r)}
+        self.success_history = {n: [0] * self.num_envs for n in range(l, r)}
 
         # for exporting purposes
         # self.config = env_config
@@ -141,7 +141,7 @@ class PuzzleEnv:
         for success_idx in success:
             n = len(self.gt_moves[success_idx])
             if n != 0:
-                self.success_history[n].append(1)
+                self.success_history[n].append(self.curr_steps[success_idx])
         for fail_idx in terminated:
             n = len(self.gt_moves[fail_idx])
             if n != 0:
@@ -151,16 +151,18 @@ class PuzzleEnv:
         for n in self.success_history.keys():
             self.success_history[n] = self.success_history[n][-window_size:]
 
-    def get_completion_rate(self) -> (Dict, float):
+    def get_completion_rate(self) -> (Dict, Dict, float):
         completion_rate_per_n = {}
+        completion_length_per_n = {}
         average_completion_rate = 0
         for n, history in self.success_history.items():
-            percentage_success = sum(history) / self.num_envs
-            completion_rate_per_n[n] = percentage_success
-            average_completion_rate += percentage_success
-        average_completion_rate /= len(self.success_history)
+            nonzero_count = np.count_nonzero(history) + 1e-8
+            completion_rate_per_n[n] = nonzero_count / len(history)
+            completion_length_per_n[n] = sum(history) / nonzero_count
 
-        return completion_rate_per_n, average_completion_rate
+        average_completion_rate = np.average(list(completion_rate_per_n.values()))
+
+        return completion_rate_per_n, completion_length_per_n, average_completion_rate
 
     def get_cumulative_reward(self):
         return self.cum_rewards
