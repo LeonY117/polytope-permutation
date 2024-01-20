@@ -158,7 +158,9 @@ class PuzzleEnv:
         for n, history in self.success_history.items():
             nonzero_count = np.count_nonzero(history) + 1e-8
             completion_rate_per_n[n] = nonzero_count / len(history)
-            completion_length_per_n[n] = sum(history) / nonzero_count
+            completion_length_per_n[n] = (
+                sum([h for h in history if h != 0]) / nonzero_count
+            )
 
         average_completion_rate = np.average(list(completion_rate_per_n.values()))
 
