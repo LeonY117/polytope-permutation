@@ -62,10 +62,14 @@ def plot_history(history, episode_length=20, density=500, save_to_folder=None):
 def plot_success_length(success_length_per_n, save_to_folder=None):
     window = 1000
     # to_plot = [h[-window:] for h in history['success_length_per_n'].values()]
-    to_plot = [
-        [n for n in h[-window:] if n != 0] for h in success_length_per_n.values()
-    ]
-    plt.violinplot(to_plot)
+    to_plot = []
+    for h in success_length_per_n.values():
+        arr = [n for n in h[-window:] if n != 0]
+        if len(arr) == 0:
+            arr = [0]
+        to_plot.append(arr)
+    plt.violinplot(to_plot, showmeans=True)
+    plt.plot(list(range(len(success_length_per_n) + 1)), "--")
     plt.ylabel("moves actually took")
     plt.xlabel("number of shuffles")
 
