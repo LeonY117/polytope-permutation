@@ -25,7 +25,7 @@ class PuzzleEnv:
         self.success_history = {n: [0] * self.num_envs for n in range(l, r)}
 
         # for exporting purposes
-        # self.config = env_config
+        self.config = env_config
         self.puzzle_name = env_config["puzzle_name"]
 
         self.reset()
