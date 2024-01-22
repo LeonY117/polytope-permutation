@@ -1,14 +1,13 @@
 import math
 import torch
 
-from torch import optim, nn
+from torch import optim, nn, autograd
 from .dqn import DQN
 
 
 class Agent:
     def __init__(self, config):
         self._load(config)
-
         self.config = config
 
     def _load(self, config):
@@ -42,7 +41,23 @@ class Agent:
             amsgrad=True,
             weight_decay=self.weight_decay,
         )
+
         self.criterion = nn.SmoothL1Loss(reduction="none")
+
+    def _eps(self):
+        return self.epsilon_end + (self.epsilon_start - self.epsilon_end) * math.exp(
+            -1.0 * self.steps / self.epsilon_decay
+        )
+
+    def update_target_net(self) -> None:
+        target_sd = self.target_network.state_dict()
+        policy_sd = self.policy_network.state_dict()
+
+        # Soft update of the target network's weights
+        # θ′ ← τ θ + (1 −τ )θ′
+        for key in policy_sd:
+            target_sd[key] = policy_sd[key] * self.tau + target_sd[key] * (1 - self.tau)
+        self.target_network.load_state_dict(target_sd)
 
     def select_action(self, states, greedy=False):
         """Selects epsilon greedy action"""
@@ -56,10 +71,13 @@ class Agent:
 
         return torch.where(s > eps, greedy_actions, rand_actions)
 
-    def _eps(self):
-        return self.epsilon_end + (self.epsilon_start - self.epsilon_end) * math.exp(
-            -1.0 * self.steps / self.epsilon_decay
-        )
+    def optimize(self, *args):
+        pass
+
+
+class OneStepAgent(Agent):
+    def __init__(self, config):
+        super().__init__(config)
 
     def optimize(self, s, a, r, s_n, terminated, mask):
         with torch.no_grad():
@@ -86,13 +104,3 @@ class Agent:
         self.steps += 1
 
         return loss.item()
-
-    def update_target_net(self) -> None:
-        target_sd = self.target_network.state_dict()
-        policy_sd = self.policy_network.state_dict()
-
-        # Soft update of the target network's weights
-        # θ′ ← τ θ + (1 −τ )θ′
-        for key in policy_sd:
-            target_sd[key] = policy_sd[key] * self.tau + target_sd[key] * (1 - self.tau)
-        self.target_network.load_state_dict(target_sd)
