@@ -115,68 +115,103 @@ class NStepAgent(Agent):
         super().__init__(config)
 
         self.n = config["n"]
+        self._init_history()
 
-        self.history = deque([], maxlen=self.n)
+    def _init_history(self):
+        """Initiates the tensors for tracking episode history"""
+        b, n = self.batch_size, self.n
+        # we use a deque for state because it's cheaper & we don't need access to
+        # intermediate values for compute, its shape is n x b x |S|
+        # self.s = deque([torch.rand((b, self.num_states))], maxlen=n)
+        self.s = torch.rand((b, n, self.num_states))
+        self.s_n = torch.rand((b, n, self.num_states))
+        self.a = torch.zeros((b, n, 1), dtype=int)
+        self.r = torch.zeros((b, n, 1), dtype=torch.float32)
+        # mask: 1 if (s, a, s') is an invalid transition
+        self.m = torch.zeros((b, n, 1), dtype=torch.float32)
+        # terminate: 1 if (s, a, s') and s' is successful
+        self.t = torch.zeros((b, n, 1), dtype=torch.float32)
 
-        self.tpn_idx = torch.zeros((self.batch_size, 1))
-        self.s_tpn = torch.zeros((self.batch_size, self.num_states))
-        self.r_tpn = torch.zeros((self.batch_size, 1))
+        # tracks G_t:t+n for every state
+        self.G = torch.zeros((b, n, 1))
+        # 1 if state s is part of the current episode
+        self.episode_mask = torch.zeros((b, n, 1), dtype=torch.float32)
+        # indicates the relative distance (to the right) to the end of episode
+        # if the distance is larger than n we can simply apply min() when retrieving
+        self.episode_end_idx = torch.zeros((b, n, 1), dtype=int)
 
-    def update_history(self, s, a, r, terminated, mask):
-        snapshot = {"s": s, "a": a, "r": r, "T": terminated, "mask": mask}
-        self.history.append(snapshot)
-        # mapping = {"s": s, "a": a, "r": r, "T": terminated, "mask": mask}
+        self.discount = self.gamma ** torch.arange(n - 1, -1, -1)
+        self.discount = self.discount.unsqueeze(0).unsqueeze(-1)
 
-        # # push to fixed size queue
-        # for key, x in mapping.items():
-        #     for idx in range(self.batch_size):
-        #         self.history[key][idx].append(x[idx])
+    def _update_history(self, s, s_n, a, r, m, t):
+        # reshape tensors
+        s = s.unsqueeze(dim=1)
+        s_n = s_n.unsqueeze(dim=1)
+        a = a[..., None, None]
+        r = r[..., None, None]
+        t = t[..., None, None]
+        m = m[..., None, None]
 
-    def _get_tpn_idx_and_r(self, env_idx):
-        """returns the index for item corresponding to t+n in history"""
-        end = min(len(self.history), self.n)
-        total_r = 0
-        for i in range(end - 1):
-            m = self.history[i + 1]["mask"][env_idx]
-            r = self.history[i]["r"][env_idx]
-            # next state transition is invalid
-            total_r += self.gamma**i * r
-            if m == 1:
-                return i + 1, total_r
+        # push everything to queue
+        # self.s.append(s)
+        self.s = torch.cat((self.s[:, 1:], s), dim=1)
+        self.s_n = torch.cat((self.s_n[:, 1:], s_n), dim=1)
+        self.a = torch.cat((self.a[:, 1:], a), dim=1)
+        self.r = torch.cat((self.r[:, 1:], r), dim=1)
+        self.m = torch.cat((self.m[:, 1:], m), dim=1)
+        self.t = torch.cat((self.t[:, 1:], t), dim=1)
 
-        return end - 1, total_r
+        self.G = torch.cat((self.G[:, 1:], torch.zeros_like(self.G[:, 0:1])), dim=1)
+
+        inv_m = (m - 1) * -1  # 0 if episode ended, 1 if episode is continuing
+        self.episode_mask *= inv_m  # zeros the row if episode ended
+        self.episode_end_idx += self.episode_mask.long()
+        self.episode_mask = torch.cat((self.episode_mask[:, 1:], inv_m), dim=1)
+
+        self.episode_end_idx = torch.cat(
+            (
+                self.episode_end_idx[:, 1:],
+                torch.zeros_like(self.episode_end_idx[:, 0:1]),
+            ),
+            dim=1,
+        )
+
+        # add reward to ongoing episodes
+        self.G += self.discount * r * self.episode_mask
 
     def optimize(self, s, a, r, s_n, terminated, mask):
-        self.update_history(s, a, r, terminated, mask)
+        self._update_history(s, s_n, a, r, mask, terminated)
 
-        s, a, r, terminated, mask = self.history[0].values()
-        # get s_t+n and r_t+n-1
-        for env_idx in range(self.batch_size):
-            tpn_idx, r_tpn = self._get_tpn_idx_and_r(env_idx)
-            s_tpn = self.history[tpn_idx]["s"][env_idx]
-            self.tpn_idx[env_idx] = tpn_idx
-            self.s_tpn[env_idx] = s_tpn
-            self.r_tpn[env_idx] = r_tpn
+        s_t = self.s[:, 0]
+        a_t = self.a[:, 0]
+        m_t = self.m[:, 0]
 
+        G_tpn = self.G[:, 0]
+        # (b, 1, 1)
+        tpn_idx = self.episode_end_idx[:, 0].unsqueeze(-1)
+        tpn_idx = torch.where(
+            tpn_idx > self.n, torch.ones_like(tpn_idx) * (self.n), tpn_idx
+        )
+        # (b, |S|)
+        s_tpn = self.s_n.gather(1, tpn_idx.repeat(1, 1, self.num_states)).squeeze(1)
+        # (b, 1)
+        t_tpn = self.t.gather(1, tpn_idx).squeeze(1)
         with torch.no_grad():
-            max_Q_s_tpn = self.target_network(self.s_tpn).max(axis=-1).values
+            # a_tpn = self.a.gather(1, self.episode_end_idx[:, 0].unsqueeze(-1)).squeeze()
+            max_Q_s_tpn = self.target_network(s_tpn).max(axis=-1).values.unsqueeze(-1)
 
         # mask out terminal states
         max_Q_s_tpn = torch.where(
-            terminated == 1, torch.zeros_like(max_Q_s_tpn), max_Q_s_tpn
+            t_tpn == 1, torch.zeros_like(max_Q_s_tpn), max_Q_s_tpn
         )
+        target = G_tpn + self.gamma ** tpn_idx.squeeze(1) * max_Q_s_tpn
 
-        # G_t:t+n = G_t:t+n-1 + gamma^n * max[Q(s_t+n, a)]
-        target = (
-            self.r_tpn.squeeze() + self.gamma ** self.tpn_idx.squeeze() * max_Q_s_tpn
-        )
+        # Q(s_t, a_t)
+        Q = self.policy_network(s_t).gather(1, a_t)
 
-        # Q(s, a)
-        Q = self.policy_network(s).gather(1, a.unsqueeze(-1))
-
-        loss = self.criterion(Q, target.unsqueeze(-1))
-        # mask out invalid transitions
-        loss = torch.where(mask == 1, torch.zeros_like(loss), loss).mean()
+        loss = self.criterion(Q, target)
+        # apply mask on loss
+        loss = torch.where(m_t == 1, torch.zeros_like(loss), loss).mean()
 
         self.optimizer.zero_grad()
         loss.backward()
