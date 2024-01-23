@@ -75,6 +75,9 @@ class Agent:
     def optimize(self, *args):
         pass
 
+    def _update_history(self, *args):
+        pass
+
 
 class OneStepAgent(Agent):
     def __init__(self, config):
