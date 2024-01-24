@@ -84,6 +84,6 @@ def plot_success_rate(success_rate_per_n, save_to_folder=None):
     plt.violinplot(to_plot)
     plt.ylabel("Success Rate")
     plt.xlabel("number of shuffles")
-
+    plt.ylim(0, 1)
     if save_to_folder:
         plt.savefig(f"{save_to_folder}/success_rate.png", dpi=300)
