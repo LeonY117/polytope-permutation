@@ -24,7 +24,6 @@ def imshow_cube(x):
 
 
 def plot_history(history, episode_length=20, density=500, save_to_folder=None):
-    density = 500
     gap = math.ceil(len(history["loss"]) / density)
     x = [
         n * gap * episode_length / 1000

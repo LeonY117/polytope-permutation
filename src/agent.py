@@ -42,7 +42,9 @@ class Agent:
 
         self.num_states, self.num_actions = inp, oup
 
-        self.optimizer = optim.Adam(self.policy_network.parameters(), lr=self.lr)
+        self.optimizer = optim.Adam(
+            self.policy_network.parameters(), lr=self.lr, eps=1.5e-4
+        )
 
         self.criterion = nn.SmoothL1Loss(reduction="none")
 
