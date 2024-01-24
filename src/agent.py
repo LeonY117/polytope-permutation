@@ -18,6 +18,8 @@ class Agent:
         self.lr = config["lr"]
         self.weight_decay = config["weight_decay"]
 
+        self.use_double = config["double"]
+
         self.epsilon_start = config["epsilon_start"]
         self.epsilon_end = config["epsilon_end"]
         self.epsilon_decay = config["epsilon_decay"]
@@ -36,12 +38,7 @@ class Agent:
 
         self.num_states, self.num_actions = inp, oup
 
-        self.optimizer = optim.AdamW(
-            self.policy_network.parameters(),
-            lr=self.lr,
-            amsgrad=True,
-            weight_decay=self.weight_decay,
-        )
+        self.optimizer = optim.Adam(self.policy_network.parameters(), lr=self.lr)
 
         self.criterion = nn.SmoothL1Loss(reduction="none")
 
@@ -85,7 +82,13 @@ class OneStepAgent(Agent):
 
     def optimize(self, s, a, r, s_n, terminated, mask):
         with torch.no_grad():
-            max_Q_s_n = self.target_network(s_n).max(axis=-1).values
+            if self.use_double:
+                greedy_a = self.policy_network(s_n).argmax(axis=-1)
+                max_Q_s_n = (
+                    self.target_network(s_n).gather(1, greedy_a.unsqueeze(-1)).squeeze()
+                )
+            else:
+                max_Q_s_n = self.target_network(s_n).max(axis=-1).values
 
         # mask out terminal states
         max_Q_s_n = torch.where(terminated == 1, torch.zeros_like(max_Q_s_n), max_Q_s_n)
