@@ -14,15 +14,17 @@ class Agent:
     def _load(self, config):
         self.batch_size = config["batch_size"]
         self.gamma = config["gamma"]
-        self.tau = config["tau"]
         self.lr = config["lr"]
         self.weight_decay = config["weight_decay"]
 
+        self.tau = config["target_network"]["tau"]
+        self.target_net_delay = config["target_network"]["delay"]
+
         self.use_double = config["double"]
 
-        self.epsilon_start = config["epsilon_start"]
-        self.epsilon_end = config["epsilon_end"]
-        self.epsilon_decay = config["epsilon_decay"]
+        self.epsilon_start = config["epsilon"]["start"]
+        self.epsilon_end = config["epsilon"]["end"]
+        self.epsilon_decay = config["epsilon"]["decay"]
         self.steps = config.get("steps", 0)
 
         self.device = "cpu"
@@ -56,7 +58,12 @@ class Agent:
         # Soft update of the target network's weights
         # θ′ ← τ θ + (1 −τ )θ′
         for key in policy_sd:
-            target_sd[key] = policy_sd[key] * self.tau + target_sd[key] * (1 - self.tau)
+            if self.tau == 0:
+                target_sd[key] = policy_sd[key]
+            else:
+                target_sd[key] = policy_sd[key] * self.tau + target_sd[key] * (
+                    1 - self.tau
+                )
         self.target_network.load_state_dict(target_sd)
 
     def select_action(self, states, greedy=False):
@@ -83,6 +90,9 @@ class OneStepAgent(Agent):
         super().__init__(config)
 
     def optimize(self, s, a, r, s_n, terminated, mask):
+        if self.noisy:
+            self.policy_network.reset_noise()
+            self.target_network.reset_noise()
         with torch.no_grad():
             if self.use_double:
                 greedy_a = self.policy_network(s_n).argmax(axis=-1)
@@ -111,6 +121,9 @@ class OneStepAgent(Agent):
         self.optimizer.step()
 
         self.steps += 1
+
+        if self.steps % self.target_net_delay == 0:
+            self.update_target_net()
 
         return loss.item()
 

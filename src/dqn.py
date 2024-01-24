@@ -10,7 +10,7 @@ class DQN(nn.Module):
         super().__init__()
         layers = []
         prev = inp
-        layer = partial(NoisyLinear, std_init=0.5) if noisy else nn.Linear
+        layer = partial(NoisyLinear, std_init=0.1) if noisy else nn.Linear
         for num_units in units:
             layers.append(layer(prev, num_units))
             layers.append(nn.ReLU())
@@ -22,3 +22,8 @@ class DQN(nn.Module):
 
     def forward(self, x):
         return self.layers(x)
+
+    def reset_noise(self):
+        for m in self.modules():
+            if isinstance(m, NoisyLinear):
+                m.reset_noise()
