@@ -27,14 +27,16 @@ class Agent:
 
         self.device = "cpu"
 
+        noisy = config["noisy_net"]
         inp, oup, network_units = (
             config["inp"],
             config["oup"],
             config["network_units"],
         )
-        self.policy_network = DQN(inp, oup, network_units).to(self.device)
-        self.target_network = DQN(inp, oup, network_units).to(self.device)
+        self.policy_network = DQN(inp, oup, network_units, noisy).to(self.device)
+        self.target_network = DQN(inp, oup, network_units, noisy).to(self.device)
         self.target_network.load_state_dict(self.policy_network.state_dict())
+        self.noisy = noisy
 
         self.num_states, self.num_actions = inp, oup
 
@@ -59,7 +61,7 @@ class Agent:
 
     def select_action(self, states, greedy=False):
         """Selects epsilon greedy action"""
-        eps = 0 if greedy else self._eps()
+        eps = 0 if greedy or self.noisy else self._eps()
         n = len(states)
         s = torch.rand(n, device=self.device)
         rand_actions = torch.randint(0, self.num_actions, (n,), device=self.device)
