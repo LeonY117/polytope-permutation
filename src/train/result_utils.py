@@ -13,7 +13,7 @@ class ResultManager:
 
         self.directory = _create_dir(self.env.config["exp_name"])
 
-    def evaluate(self, steps):
+    def evaluate(self, steps, greedy=True):
         history = {
             "eval": True,
             "reward": [],
@@ -30,7 +30,7 @@ class ResultManager:
         s = self.env.reset()
         s = torch.tensor(s, device=self.agent.device)
         for _ in tqdm(range(steps)):
-            a = self.agent.select_action(s, greedy=True)
+            a = self.agent.select_action(s, greedy=greedy)
             s_n, r, terminated, mask = self.env.step(a)
             s_n = torch.tensor(s_n, device=self.agent.device)
             s = s_n
