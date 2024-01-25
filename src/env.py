@@ -140,11 +140,11 @@ class PuzzleEnv:
         window_size = self.num_envs
         for success_idx in success:
             n = len(self.gt_moves[success_idx])
-            if n != 0:
+            if n != 0 and n in self.success_history.keys():
                 self.success_history[n].append(self.curr_steps[success_idx])
         for fail_idx in terminated:
             n = len(self.gt_moves[fail_idx])
-            if n != 0:
+            if n != 0 and n in self.success_history.keys():
                 self.success_history[n].append(0)
 
         # truncate window
