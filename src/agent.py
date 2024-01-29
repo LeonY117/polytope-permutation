@@ -1,12 +1,20 @@
 import math
 import torch
-from collections import deque
 
-from torch import optim, nn, autograd
+from torch import optim, nn
 from .dqn import DQN
 
+__all__ = ["Agent"]
 
-class Agent:
+
+def Agent(config):
+    if config["n"] == 1:
+        return OneStepAgent(config)
+    else:
+        return NStepAgent(config)
+
+
+class _Agent:
     def __init__(self, config):
         self._load(config)
         self.config = config
@@ -85,7 +93,7 @@ class Agent:
         pass
 
 
-class OneStepAgent(Agent):
+class OneStepAgent(_Agent):
     def __init__(self, config):
         super().__init__(config)
 
@@ -128,7 +136,7 @@ class OneStepAgent(Agent):
         return loss.item()
 
 
-class NStepAgent(Agent):
+class NStepAgent(_Agent):
     def __init__(self, config):
         super().__init__(config)
 
